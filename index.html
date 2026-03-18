@@ -5,151 +5,192 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#000000">
-    
-    <title>Ghost Pixel Pro</title>
+    <title>Ghost Pixel Control</title>
     <style>
         body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            background-color: #000000 !important;
+            margin: 0; padding: 0;
+            width: 100%; height: 100%;
+            background-color: #000;
+            color: white;
+            font-family: sans-serif;
             overflow: hidden;
-            cursor: none;
-            touch-action: none; /* Evita zoom accidental */
+            touch-action: none;
         }
 
-        #canvas {
+        /* MENU DE CONTROL */
+        #menu {
+            position: absolute;
+            z-index: 100;
+            background: #111;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            padding: 15px;
+            border: 1px solid #444;
+            background: #222;
+            color: white;
+            border-radius: 8px;
+            font-size: 1.2rem;
+        }
+
+        button.active {
+            background: #007bff;
+            border-color: #fff;
+        }
+
+        #btn-start {
+            background: #28a745;
+            width: 80%;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        canvas {
             display: block;
-            background-color: #000000;
+            background: #000;
         }
     </style>
 </head>
-<body onclick="startEffect()">
+<body>
 
-    <canvas id="canvas"></canvas>
+    <div id="menu">
+        <h3>VALOR</h3>
+        <div class="grid" id="numbers">
+            <button onclick="setVal('n','A')">A</button>
+            <button onclick="setVal('n','2')">2</button>
+            <button onclick="setVal('n','3')" class="active">3</button>
+            <button onclick="setVal('n','4')">4</button>
+            <button onclick="setVal('n','5')">5</button>
+            <button onclick="setVal('n','7')">7</button>
+            <button onclick="setVal('n','8')">8</button>
+            <button onclick="setVal('n','K')">K</button>
+        </div>
+        <h3>PALO</h3>
+        <div class="grid" id="suits">
+            <button onclick="setVal('s','♥')" class="active">♥</button>
+            <button onclick="setVal('s','♦')">♦</button>
+            <button onclick="setVal('s','♣')">♣</button>
+            <button onclick="setVal('s','♠')">♠</button>
+        </div>
+        <button id="btn-start" onclick="confirmSetup()">LISTO (Pantalla Negra)</button>
+    </div>
+
+    <canvas id="canvas" onclick="startEffect()"></canvas>
 
     <script>
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
-
-        // Ajustar resolución inicial
-        function resize() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            ctx.fillStyle = "#000000";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-        }
-        window.addEventListener('resize', resize);
-        resize();
-
+        let selectedNum = '3';
+        let selectedSuit = '♥';
         let drawing = false;
         let currentStep = 0;
-        let speed = 2; // Puntos por frame
+        let fullPath = [];
 
-        // --- RUTA DEL DIBUJO ---
-        function generatePath() {
-            const w = canvas.width;
-            const h = canvas.height;
-            const p = [];
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
 
-            // 1. Dibujar el "3" (Zona Segura Top-Left)
-            const nX = w * 0.15; 
-            const nY = h * 0.15; 
-            const nS = w * 0.07; // Tamaño del número
-
-            const threePoints = [
-                {x: nX, y: nY}, 
-                {x: nX + nS, y: nY},
-                {x: nX + nS, y: nY + nS},
-                {x: nX + nS/2, y: nY + nS},
-                {x: nX + nS, y: nY + nS},
-                {x: nX + nS, y: nY + nS*2},
-                {x: nX, y: nY + nS*2}
-            ];
-            interpolate(p, threePoints, 15);
-
-            // 2. SALTO INVISIBLE (Coordenada centinela)
-            p.push({x: -1, y: -1});
-
-            // 3. Dibujar Corazón (Centro)
-            const cx = w / 2;
-            const cy = h / 2.2; // Ligeramente subido para evitar barra inferior Safari
-            const heartSize = w * 0.022; 
-
-            for (let t = 0; t <= Math.PI * 2; t += 0.02) {
-                let x = cx + 16 * Math.sin(t)**3 * heartSize;
-                let y = cy - (13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t)) * heartSize;
-                p.push({x, y});
-            }
-            return p;
+        function setVal(type, val) {
+            if(type === 'n') selectedNum = val;
+            else selectedSuit = val;
+            
+            // Actualizar visual de botones
+            const parent = type === 'n' ? 'numbers' : 'suits';
+            document.querySelectorAll(`#${parent} button`).forEach(b => {
+                b.classList.toggle('active', b.innerText === val);
+            });
         }
 
-        function interpolate(pathArray, keyPoints, steps) {
-            for (let i = 0; i < keyPoints.length - 1; i++) {
-                let start = keyPoints[i];
-                let end = keyPoints[i+1];
-                for (let s = 0; s <= steps; s++) {
-                    let t = s / steps;
-                    pathArray.push({
-                        x: start.x + (end.x - start.x) * t,
-                        y: start.y + (end.y - start.y) * t
+        function confirmSetup() {
+            document.getElementById('menu').style.display = 'none';
+            generateFullPath();
+            // Limpieza a negro
+            ctx.fillStyle = "#000";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function generateFullPath() {
+            fullPath = [];
+            const w = canvas.width;
+            const h = canvas.height;
+
+            // 1. RUTA DEL NÚMERO (Simplificada como texto para el dibujo)
+            // En un gimmick real usaríamos coordenadas, aquí usamos un truco de texto
+            ctx.font = `bold ${w * 0.15}px serif`;
+            ctx.textAlign = "center";
+            // Dibujamos el número invisiblemente para capturar sus puntos
+            const numX = w * 0.15;
+            const numY = h * 0.15;
+            
+            // Generamos puntos alrededor de la silueta del número y palo
+            // (Para simplificar y que funcione con CUALQUIER entrada, usamos este generador)
+            addTextPoints(selectedNum, numX, numY, w * 0.12);
+            fullPath.push({x: -1, y: -1}); // SALTO
+            addTextPoints(selectedSuit, w/2, h/2, w * 0.4);
+        }
+
+        function addTextPoints(text, x, y, size) {
+            ctx.font = `bold ${size}px serif`;
+            const metrics = ctx.measureText(text);
+            const textW = metrics.width;
+            const textH = size;
+
+            // Creamos un canvas temporal para "escanear" el texto
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCanvas.width = canvas.width;
+            tempCanvas.height = canvas.height;
+            tempCtx.font = ctx.font;
+            tempCtx.fillText(text, x - textW/2, y + textH/4);
+
+            const imgData = tempCtx.getImageData(0, 0, canvas.width, canvas.height).data;
+            
+            // Escaneamos píxeles rellenos para crear la ruta
+            for (let i = 0; i < imgData.length; i += 400) { // El salto define la densidad
+                if (imgData[i+3] > 128) {
+                    const pixelIdx = i / 4;
+                    fullPath.push({
+                        x: pixelIdx % canvas.width,
+                        y: Math.floor(pixelIdx / canvas.width)
                     });
                 }
             }
         }
 
-        let fullPath = generatePath();
-
         function startEffect() {
-            if (drawing) return;
-
-            // Truco para Safari: Scroll para intentar ocultar UI
+            if (drawing || document.getElementById('menu').style.display !== 'none') return;
             window.scrollTo(0, 1);
-
-            // Intentar Fullscreen (solo funcionará en Android/PC, en iOS se ignora pero no rompe el código)
-            if (canvas.requestFullscreen) canvas.requestFullscreen();
-            else if (canvas.webkitRequestFullscreen) canvas.webkitRequestFullscreen();
-
-            // Ocultar cursor
-            document.body.style.cursor = 'none';
-
-            // Limpieza a negro puro
-            ctx.fillStyle = "#000000";
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
             drawing = true;
             animate();
         }
 
         function animate() {
+            const speed = 3; 
             for (let i = 0; i < speed; i++) {
-                if (currentStep >= fullPath.length) {
-                    drawing = false;
-                    return;
+                if (currentStep >= fullPath.length) return;
+                const p = fullPath[currentStep];
+                if (p.x !== -1) {
+                    ctx.shadowBlur = 10;
+                    ctx.shadowColor = "white";
+                    ctx.fillStyle = "white";
+                    ctx.beginPath();
+                    ctx.arc(p.x + (Math.random()-0.5)*2, p.y + (Math.random()-0.5)*2, 1.5, 0, Math.PI*2);
+                    ctx.fill();
                 }
-
-                const target = fullPath[currentStep];
-
-                if (target.x === -1) {
-                    currentStep++;
-                    continue; 
-                }
-
-                // Estilo del "Píxel"
-                ctx.shadowBlur = 12;
-                ctx.shadowColor = "white";
-                ctx.fillStyle = "white";
-                
-                // Jitter para efecto "energía"
-                const jX = (Math.random() - 0.5) * 1.5;
-                const jY = (Math.random() - 0.5) * 1.5;
-
-                ctx.beginPath();
-                ctx.arc(target.x + jX, target.y + jY, 1.8, 0, Math.PI * 2);
-                ctx.fill();
-
                 currentStep++;
             }
             requestAnimationFrame(animate);
