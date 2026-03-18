@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ghost Pixel Pure</title>
+    <style>
+        body, html {
+            margin: 0; padding: 0;
+            width: 100%; height: 100%;
+            /* Negro absoluto garantizado */
+            background-color: #000000 !important; 
+            overflow: hidden;
+            cursor: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #canvas {
+            width: 100vw;
+            height: 100vh;
+            background-color: #000000;
+        }
+    </style>
+</head>
+<body onclick="startEffect()">
+
+    <canvas id="canvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        // Ajustar resolución del canvas nativo
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let drawing = false;
+        let points = [];
+        let currentStep = 0;
+        let speed = 2; // Píxeles por frame (aumentar para dibujar más rápido)
+
+        // --- RUTA COMPLETA DEL DIBUJO ---
+        function generateFullCardPath() {
+            const w = canvas.width;
+            const h = canvas.height;
+            const p = [];
+
+            // 1. Definir puntos clave para el número "3" (Top-Left)
+            // Escala relativa al tamaño de pantalla
+            const nX = w * 0.10; // Posición X
+            const nY = h * 0.10; // Posición Y
+            const nS = w * 0.08; // Tamaño escala
+
+            const threePoints = [
+                {x: nX, y: nY}, 
+                {x: nX + nS, y: nY},
+                {x: nX + nS, y: nY + nS},
+                {x: nX + nS/2, y: nY + nS},
+                {x: nX + nS, y: nY + nS},
+                {x: nX + nS, y: nY + nS*2},
+                {x: nX, y: nY + nS*2}
+            ];
+
+            // Interpolar puntos del "3" para que el dibujo sea suave
+            interpolate(p, threePoints, 10);
+
+            // 2. Salto invisible al centro (Punto de control para que el píxel salte)
+            p.push({x: -100, y: -100}); // Coordenada fuera de pantalla para indicar salto
+
+            // 3. Generar Corazón Central (Paramétrico)
+            const cx = w / 2;
+            const cy = h / 2;
+            // Tamaño del corazón relativo al ancho de pantalla
+            const heartSize = w * 0.025; 
+
+            for (let t = 0; t <= Math.PI * 2; t += 0.02) {
+                // Ecuación matemática del corazón
+                let x = cx + 16 * Math.sin(t)**3 * heartSize;
+                let y = cy - (13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t)) * heartSize;
+                p.push({x, y});
+            }
+            
+            return p;
+        }
+
+        // Función auxiliar para suavizar líneas rectas
+        function interpolate(pathArray, keyPoints, stepsPerSegment) {
+            for (let i = 0; i < keyPoints.length - 1; i++) {
+                let start = keyPoints[i];
+                let end = keyPoints[i+1];
+                for (let s = 0; s <= stepsPerSegment; s++) {
+                    let t = s / stepsPerSegment;
+                    pathArray.push({
+                        x: start.x + (end.x - start.x) * t,
+                        y: start.y + (end.y - start.y) * t
+                    });
+                }
+            }
+        }
+
+        const path = generateFullCardPath();
+
+        function startEffect() {
+            if (drawing) return;
+            
+            // Forzar pantalla completa para ocultar navegadores (Crucial)
+            const doc = document.documentElement;
+            if (doc.requestFullscreen) doc.requestFullscreen();
+            else if (doc.webkitRequestFullscreen) doc.webkitRequestFullscreen(); // Safari
+
+            // Limpieza inicial a negro puro antes de empezar
+            ctx.fillStyle = "#000000";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            drawing = true;
+            animate();
+        }
+
+        function animate() {
+            // Dibujar 'speed' puntos por frame
+            for (let i = 0; i < speed; i++) {
+                if (currentStep >= path.length) {
+                    drawing = false;
+                    return; // Fin del dibujo
+                }
+
+                const target = path[currentStep];
+
+                // Detectar salto invisible
+                if (target.x < 0) {
+                    currentStep++;
+                    continue; 
+                }
+                
+                // Configuración del "Píxel Vivo" (Brillo blanco)
+                ctx.shadowBlur = 10; // Efecto neón
+                ctx.shadowColor = "rgba(255, 255, 255, 0.8)";
+                ctx.fillStyle = "white";
+                
+                // Pequeño jitter (temblor) para que parezca electricidad/estática
+                const jitterX = (Math.random() - 0.5) * 2;
+                const jitterY = (Math.random() - 0.5) * 2;
+
+                // Dibujar el punto
+                ctx.beginPath();
+                // Grosor del punto (2px)
+                ctx.arc(target.x + jitterX, target.y + jitterY, 2, 0, Math.PI * 2);
+                ctx.fill();
+
+                currentStep++;
+            }
+
+            // Solicitar siguiente frame
+            requestAnimationFrame(animate);
+        }
+
+        // Corrección de tamaño si se gira el dispositivo
+        window.addEventListener('resize', () => {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            // Nota: Girar el dispositivo reiniciarà el dibujo si se desea, 
+            // pero para magia es mejor mantener el lock de orientación.
+        });
+    </script>
+</body>
+</html>
